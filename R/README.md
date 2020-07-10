@@ -8,5 +8,9 @@ Escala bivariada en base a las variables:
 
 <a href='https://www.estadisticaciudad.gob.ar/eyc/?p=27735' > Superficie total (m2) de departamentos en alquiler de 1 a 5 ambientes (usados y a estrenar) por barrio. Ciudad de Buenos Aires. Julio 2013/mayo 2020
  </a>
+ 
+
+ 
+ 
 
 
