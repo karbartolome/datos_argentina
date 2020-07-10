@@ -42,6 +42,22 @@ actividad <- gather(data = actividad, key = "actividad", value = "porcentaje", 2
     )
   )
 
+# íconos: https://icons8.com/
+actividad <- actividad %>% 
+  mutate(imagen=case_when(
+    actividad=="Industria manufacturera" ~ "https://img.icons8.com/ios-glyphs/30/000000/factory-1.png",
+    actividad=="Agricultura, ganadería, caza y silvicultura" ~ "https://img.icons8.com/ios-glyphs/30/000000/plant-under-rain.png",
+    actividad=="Comercio mayorista, minorista y reparaciones"  ~ "https://img.icons8.com/ios-glyphs/30/000000/shopping-cart.png",                                        
+    actividad=="Actividades inmobiliarias, empresariales y de alquiler"  ~ "https://img.icons8.com/ios-glyphs/30/000000/equal-housing-opportunity.png",                             
+    actividad=="Transporte y comunicaciones"  ~ "https://img.icons8.com/ios-glyphs/30/000000/train.png",                                                     
+    actividad=="Administración pública y defensa; planes de seguridad social de afiliación obligatoria"  ~ "https://img.icons8.com/ios-glyphs/30/000000/museum.png",
+    actividad=="Explotación de minas y canteras"  ~ "https://img.icons8.com/ios-glyphs/30/000000/mine-cart.png",                                                       
+    actividad=="Enseñanza"  ~ "https://img.icons8.com/ios-glyphs/30/000000/school.png",                                                                             
+    actividad=="Intermediación financiera"  ~ "https://img.icons8.com/ios-glyphs/30/000000/coin-in-hand.png",                                                            
+    actividad=="Construcción"  ~ "https://img.icons8.com/ios-glyphs/30/000000/fork-lift.png",                                                                         
+    actividad=="Servicios sociales y de salud"  ~ "https://img.icons8.com/ios-glyphs/30/000000/hospital-3.png",
+    TRUE~""
+    ))
 
 barchartrace <- ggplot(actividad, aes(x = -rank, y = porcentaje, fill = actividad)) +
   geom_tile(aes(y = porcentaje / 2, height = porcentaje, fill = actividad), width =
@@ -55,6 +71,7 @@ barchartrace <- ggplot(actividad, aes(x = -rank, y = porcentaje, fill = activida
     nudge_y = 0.005,
     size = 3.4
   ) +
+  geom_image(aes(image=imagen),size=0.1, nudge_x = 2)+
   scale_fill_viridis_d(option = "B") +
   ylim(0, 0.42) +
   transition_states(trimestre,
