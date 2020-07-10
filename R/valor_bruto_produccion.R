@@ -96,4 +96,4 @@ barchartrace <- ggplot(actividad, aes(x = -rank, y = porcentaje, fill = activida
   )
 
 
-animate(grafico,duration=13, nframes = 100, fps = 50)
+animate(barchartrace,duration=13, nframes = 100, fps = 50)
