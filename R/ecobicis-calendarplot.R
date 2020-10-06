@@ -9,6 +9,7 @@ rm(list=ls())
 df=read.csv('recorridos-realizados-2019.csv')
 
 # Procesamiento -----------------------------------------------------------
+# Me basé en este ejemplo: https://vietle.info/post/calendarheatmap/
 
 dfPlot  = df %>% 
   separate(duracion_recorrido, into=c('duration_dias','duration_string','duration_horas'), sep=" ") %>% 
