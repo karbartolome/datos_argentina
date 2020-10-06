@@ -30,10 +30,6 @@ dfPlot  = df %>%
             edad_mediana = median(edad, na.rm = TRUE)) %>% 
   ungroup() 
 
-# Fill valores faltantes:
-dfPlot$duracion_prom=na.locf(dfPlot$duracion_prom, fromLast = TRUE)   
-dfPlot$n=na.locf(dfPlot$n, fromLast = TRUE)   
-
 # Días faltantes si los hubiera
 fechas  = tibble(fecha = seq(
     dmy("01/01/2019"),
@@ -43,6 +39,10 @@ fechas  = tibble(fecha = seq(
 
 # Unión
 dfPlot = merge(dfPlot, fechas,  by='fecha', all.x=TRUE, all.y=TRUE)
+
+# Fill valores faltantes:
+#dfPlot$duracion_prom2=na.locf(dfPlot$duracion_prom, fromLast = FALSE) 
+#dfPlot$n2=na.locf(dfPlot$n, fromLast = FALSE)   
 
 # Variables de tiempo:
 dfPlot = dfPlot %>% mutate(
@@ -99,12 +99,12 @@ g1
 num=1000
 cols = c('#7EC8D9', '#8BBF56')
 
-g2=ggplot (dfPlot %>% filter(!is.na(fecha)), aes(x=fecha, y=duracion_prom, group=1))+
-  geom_line(color=cols[2])+
+g2=ggplot (dfPlot %>% filter(!is.na(fecha) & !is.na(duracion_prom)), aes(x=fecha, y=duracion_prom, group=1))+
+  geom_path(color=cols[2])+
   geom_line(aes(y = n/num), color = cols[1]) + 
-  scale_y_continuous(name = "Duración", 
+  scale_y_continuous(name = "Duración promedio (minutos)", 
                      sec.axis = sec_axis(~.*num, name = "Cantidad")) + 
-  labs(x='',y='Cantidad de viajes',
+  labs(x='',
        title ='Duración y cantidad de viajes en Eco Bicis (2019)', 
        caption='@karbartolome')+
   theme(aspect.ratio = 1/2,
@@ -127,3 +127,4 @@ g2
 
 library(gridExtra)
 grid.arrange(g1,g2)
+
