@@ -65,7 +65,7 @@ dfPlot = dfPlot %>%
 
 g1 = dfPlot %>%
   filter(!is.na(fecha)) %>% 
-  ggplot(aes(weekday,-week, fill = duracion_median)) +
+  ggplot(aes(weekday,-week, fill = duracion_prom)) +
   geom_tile(colour = "white")  + 
   geom_text(aes(label = day(fecha)), size = 2.5, color = "black") +
   theme(aspect.ratio = 1/2,
