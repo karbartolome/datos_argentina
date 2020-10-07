@@ -3,13 +3,16 @@ library(ggplot2)
 library(lubridate)
 library(tidyr)
 library(xts)
+library(cowplot)
+library(gridExtra)
+library(biscale)
+
 
 # Datos de Eco Bicis - recorridos 2019 para tomar un año completo ---------------
 rm(list=ls())
-df=read.csv('recorridos-realizados-2019.csv')
+df=read.csv('recorridos-realizados-2019.csv', stringsAsFactors = FALSE)
 
 # Procesamiento -----------------------------------------------------------
-# Me basé en este ejemplo: https://vietle.info/post/calendarheatmap/
 
 dfPlot  = df %>% 
   separate(duracion_recorrido, into=c('duration_dias','duration_string','duration_horas'), sep=" ") %>% 
@@ -26,9 +29,7 @@ dfPlot  = df %>%
   summarise(n=n(), 
             duracion_prom=mean(duracion, na.rm = TRUE), 
             duracion_median = median(duracion, na.rm = TRUE),
-            duracion_sum=sum(duracion, na.rm = TRUE), 
-            edad_prom = mean(edad, na.rm = TRUE), 
-            edad_mediana = median(edad, na.rm = TRUE)) %>% 
+            duracion_sum=sum(duracion, na.rm = TRUE)) %>% 
   ungroup() 
 
 # Días faltantes si los hubiera
@@ -126,6 +127,50 @@ g2=ggplot (dfPlot %>% filter(!is.na(fecha) & !is.na(duracion_prom)), aes(x=fecha
 g2
 
 
-library(gridExtra)
 grid.arrange(g1,g2)
 
+
+
+# Biscale
+data_biscale <- bi_class(dfPlot %>% filter(!is.na(duracion_prom) & !is.na(n)), 
+                         x='n',
+                         y='duracion_prom', 
+                         style="quantile",dim=3)
+
+g3=data_biscale %>%
+  filter(!is.na(fecha)) %>% 
+  ggplot(aes(weekday,-week, fill = bi_class)) +
+  geom_tile(colour = "white")  + 
+  geom_text(aes(label = day(fecha)), size = 2.5, color = "black") +
+  bi_scale_fill(pal = "DkCyan", dim = 3) +
+  facet_wrap(~month, nrow = 3, ncol = 4, scales = "free") +
+  theme(aspect.ratio = 1/2,
+        legend.position = "none",
+        legend.key.width = unit(3, "cm"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.title.align = 0.5,
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold", size = 15),
+        panel.border = element_rect(colour = "grey", fill=NA, size=1),
+        plot.title = element_text(hjust = 0, vjust=1.2, size = 14, face = "bold",
+                                  margin = margin(0,0,0.5,0, unit = "cm"))) +
+  labs(title = "Duración y cantidad de viajes en EcoBicis (2019)", 
+       caption='@karbartolome')
+
+legend <- bi_legend(pal = "DkCyan",
+                    dim = 3,
+                    xlab = "Cantidad",
+                    ylab = "Duración promedio",
+                    size = 8)
+
+
+grafico <- ggdraw() +
+  draw_plot(g3, 0, 0, 1, 1) +
+  draw_plot(legend, 0.6, 0.79, 0.2, 0.2)
+
+grafico
