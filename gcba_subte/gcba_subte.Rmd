@@ -4,7 +4,7 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
 ```
 
 # Librerías 
@@ -20,8 +20,6 @@ library(reshape) # Untable
 conflicted::conflict_prefer("filter", "dplyr")
 conflicted::conflict_prefer("select", "dplyr")
 
-
-
 options(scipen=999)
 ```
 
@@ -31,12 +29,15 @@ options(scipen=999)
 Se importan los datos de viajes en subte de la Ciudad Autónoma de Buenos Aires, en 2020. 
 
 ```{r}
-df <- read_delim('https://cdn.buenosaires.gob.ar/datosabiertos/datasets/sbase/subte-viajes-molinetes/molinetes_112021.csv',
-               delim =';',
-               col_types=cols(FECHA = col_date("%d/%m/%Y"))) %>% 
+df <-
+  read_delim(
+    'https://cdn.buenosaires.gob.ar/datosabiertos/datasets/sbase/subte-viajes-molinetes/molinetes_112021.csv',
+    delim = ';',
+    col_types = cols(FECHA = col_date("%d/%m/%Y"))
+  ) %>%
   janitor::clean_names() %>%
   filter(!is.na(fecha)) %>%
-  mutate(hora = hour(desde)) 
+  mutate(hora = hour(desde))
 ```
 
 # Generación de datos para la tabla
@@ -44,24 +45,23 @@ df <- read_delim('https://cdn.buenosaires.gob.ar/datosabiertos/datasets/sbase/su
 Función para obtener la hora promedio o mediana:
 
 ```{r}
-get_hour <- function(.linea, .df, .mean = TRUE){
-  
+get_hour <- function(.linea, .df, .mean = TRUE) {
   temp <- .df %>%
     filter(linea == .linea) %>%
     select(hora, pax_total)
   
-  if (.mean == TRUE){
+  if (.mean == TRUE) {
     hora <- untable(temp, num = temp$pax_total) %>%
-        select(-pax_total) %>%
-        mutate(hora_circular = circular(hora, template = "clock24", units = "hours")) %>%
-        summarise(hora = mean(hora_circular)) %>%
-        pull(hora)
+      select(-pax_total) %>%
+      mutate(hora_circular = circular(hora, template = "clock24", units = "hours")) %>%
+      summarise(hora = mean(hora_circular)) %>%
+      pull(hora)
   } else {
-     hora <- untable(temp, num = temp$pax_total) %>%
-        select(-pax_total) %>%
-        mutate(hora_circular = circular(hora, template = "clock24", units = "hours")) %>%
-        summarise(hora = median(hora_circular)) %>%
-        pull(hora)
+    hora <- untable(temp, num = temp$pax_total) %>%
+      select(-pax_total) %>%
+      mutate(hora_circular = circular(hora, template = "clock24", units = "hours")) %>%
+      summarise(hora = median(hora_circular)) %>%
+      pull(hora)
   }
   
   as.numeric(hora) %% 24
@@ -71,28 +71,27 @@ get_hour <- function(.linea, .df, .mean = TRUE){
 Función para generar un gráfico circular de la cantidad de pasajeros por hora por línea de subte:
 
 ```{r}
-plot_clock <- function(.linea, .df, .color='black', .hora_promedio){
- 
-   p <- .df %>% 
-     filter(linea == .linea) %>%
-     group_by(hora) %>%
-     summarise(pax_total = sum(pax_total)) %>%
-     ungroup() %>%
-     ggplot(aes(x = hora, y = pax_total)) +
-     geom_col(color='white', fill='lightgrey') +
-     coord_polar(start = 0) +
-     scale_x_continuous(
-       "",
-       limits = c(0, 24),
-       breaks = seq(0, 24),
-       labels = seq(0, 24)
-     ) +
-     geom_vline(xintercept = .hora_promedio, color=.color, size=2)+
-     labs(y='Pasajeros')+
-     theme_minimal()+
-     theme(text = element_text(size=25))
-  
-  return(p)
+plot_clock <- function(.linea, .df, .color = 'black', .hora_promedio) {
+  .df %>%
+    filter(linea == .linea) %>%
+    group_by(hora) %>%
+    summarise(pax_total = sum(pax_total)) %>%
+    ungroup() %>%
+    ggplot(aes(x = hora, y = pax_total)) +
+    geom_col(color = 'white', fill = 'lightgrey') +
+    coord_polar(start = 0) +
+    scale_x_continuous(
+      "",
+      limits = c(0, 24),
+      breaks = seq(0, 24),
+      labels = seq(0, 24)
+    ) +
+    geom_vline(xintercept = .hora_promedio,
+               color = .color,
+               size = 2) +
+    labs(y = 'Pasajeros') +
+    theme_minimal() +
+    theme(text = element_text(size = 25))
 }
 ```
 
@@ -160,7 +159,9 @@ datos_tabla <- tibble(linea = sort(unique(df$linea))) %>%
                  panel.grid = element_blank())
     )
   ) %>% 
-  mutate(linea_imagen = here::here('',paste0('gcba_subte/lineas/',tolower(linea), '.jpg')))
+  mutate(linea_imagen = here::here('',paste0('gcba_subte/lineas/',
+                                             tolower(linea), 
+                                             '.jpg')))
 ```
 
 
@@ -246,16 +247,13 @@ tabla<-datos_tabla %>%
   fmt_number(pax_total, suffixing = TRUE) %>% 
   
   cols_label(
-    recorrido = md('**Recorrido**'),
-    hora_promedio = md("**Hora promedio**"),
-    reloj_plot = md('**Pasajeros por hora**'),
+    recorrido = md('Recorrido'),
+    hora_promedio = md("Hora promedio"),
+    reloj_plot = md('Pasajeros por hora'),
     # reloj_plot = gt::html(
     #   "<span style='color:#grey'>Pasajeros por hora</span>"),
-    pax_total = md('**Total pasajeros**'),
+    pax_total = md('Total pasajeros'),
     evolucion_plot = 'Pasajeros por día'
-    # evolucion_plot = gt::html(
-    #   "<div><span>Evolución</span></div> 
-    #    <div style='font-size:10px>Cantidad de pasajeros totales por día durante el mes de Noviembre</div>")
   )%>%
   
   # Fondo gris en el recorrido
@@ -263,7 +261,9 @@ tabla<-datos_tabla %>%
     style = list(cell_fill(color = "#f0f0f0")),
     locations = cells_body(columns = c('recorrido'))
   )%>%
-  # General table options
+  
+  
+  # Opciones de la tabla
   tab_options(
     data_row.padding = px(0),
     table.border.top.style = "hidden",
@@ -281,6 +281,7 @@ tabla<-datos_tabla %>%
   
   tab_source_note('Elaboración propia en base a datos del Portal de Datos Abiertos de la Ciudad Autónoma de Buenos Aires') %>% 
   
+  # Título
   tab_style(
     locations = cells_title(groups = 'title'),
     style = list(
@@ -289,7 +290,8 @@ tabla<-datos_tabla %>%
         size='xx-large',weight='bold',align='left',
         color='#383838'
   )))%>%
-  # Subtitle
+  
+  # Subtítulo
   tab_style(
     locations = cells_title(groups = 'subtitle'),
     style = list(
@@ -298,11 +300,9 @@ tabla<-datos_tabla %>%
         size='small',align='left'
   ))) %>% 
   
-  cols_align('center',  columns = c('pax_total', 'hora_promedio')) %>% 
-  cols_align('left', columns=c('reloj_plot', 'evolucion_plot'))
-  
-
-tabla
+  # Alineación 
+  cols_align('center',  columns = c('pax_total', 'hora_promedio', 
+                                    'reloj_plot', 'evolucion_plot')) 
 ```
 
 
