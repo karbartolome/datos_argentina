@@ -598,8 +598,6 @@ tabla<-datos_tabla %>%
   # Alineación 
   cols_align('center',  columns = c('pax_total', 
                                     'reloj_plot', 'evolucion_plot')) 
-
-tabla
 ```
 
 
@@ -610,7 +608,7 @@ Se guarda la tabla:
 
 ```{r}
 gt::gtsave(tabla, 'tabla_subtes_upgrade.png', 
-           vwidth = 1500, vheight = 2000)
+           vwidth = 1300, vheight = 2500)
 ```
 
 
