@@ -41,16 +41,6 @@ df <-
   mutate(hora = hour(desde))
 ```
 
-Se visualizan las primeras observaciones.
-
-```{r}
-df %>% head(5) %>% 
-  mutate(desde=as.character(desde), hasta=as.character(hasta)) %>% 
-  select(linea, estacion, fecha, hora, desde, hasta, pax_total) %>% 
-  gt()
-```
-
-
 # Hora de uso de cada línea de subte
 
 Función para obtener la hora promedio:
