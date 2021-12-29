@@ -304,7 +304,7 @@ datos_tabla <- tibble(linea = sort(unique(df$linea))) %>%
     evolucion_plot = map2(linea, color,
       ~ df %>% filter(linea == .x) %>%
           group_by(fecha) %>%
-          summarise(n = n()) %>%
+          summarise(n = sum(pax_total)) %>%
           ggplot(aes(x = fecha, y = n)) +
           geom_line(color='grey', size=2.5)+
           geom_line(color=.y, size=1.5)+
