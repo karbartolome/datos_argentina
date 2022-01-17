@@ -1,21 +1,67 @@
 ---
-title: "Viajes en subte"
+title: "Uso del subte en la Ciudad Autónoma de Buenos Aires"
+description: |
+  Mediante el uso de datos de uso del subte en CABA, se explican distintas funcionalidades de los paquetes gt (grammar of tables) y ggplot2 (grammar of graphics).
+author:
+  - first_name: "Karina"
+    last_name: "Bartolomé"
+    url: https://karbartolome-blog.netlify.app/
+date: "2022-01-15"
+twitter:
+  site: "@karbartolome"
+  creator: "Karina Bartolomé"
 output: github_document
+bibliography: bib.bib
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+knitr::opts_chunk$set(echo = TRUE, 
+                      eval = TRUE,
+                      warning = FALSE, 
+                      message = FALSE, 
+                      code_folding=TRUE,
+                      align='center')
+
+options(scipen=999)
 ```
 
-# Librerías 
+# Introducción
 
-Se cargan las librerías a utilizar
+El paquete **{ggplot2}** 📦[^1] es uno de los paquetes más utilizados para la visualización de datos en R. Está basado en **the Grammar of Graphics**, @wilkinson2012grammar, y permite generar gráficos mediante capas. Por otro lado, **the Grammar of Tables {gt}** 📦 [^2] se utiliza para generar tablas con una estructura similar a la de {ggplot2}, utilizando capas. Ambos enfoques pueden combinarse generando tablas que incluyen gráficos. En este caso, armé un ejemplo con datos provistos por el portal de datos abiertos de la Ciudad Autónoma de Buenos Aires. La idea de este post surgió de una [publicación de Benjamin Nowak en Twitter](https://twitter.com/BjnNowak/status/1472562727684124688).
+
+[^1]: @gggplot2
+
+[^2]: @gt
+
+The grammar of tables se basa en la siguiente estructura:
+
+```{r}
+#| fig.cap = 'Workflow con tablas gt, fuente: https://gt.rstudio.com'
+
+knitr::include_graphics(here::here('gcba_subte/images/gt_workflow_diagram.svg'))
+```
+
+En donde las tablas tienen un formato específico, generado mediante capas:
+
+```{r}
+#| fig.cap = 'Estructura de tablas gt, fuente: https://gt.rstudio.com'
+
+knitr::include_graphics(here::here('gcba_subte/images/gt_parts_of_a_table.svg'))
+```
+
+# 1️⃣ Librerías
+
+Se cargan las librerías a utilizar. Principalmente se utilizarán **{ggplot2}**, incluida en el ecosistema **Tidyverse**[^3], y **{gt}**.
+
+[^3]: @tidyverse
 
 ```{r}
 library(tidyverse) # Manipulación de datos
 library(lubridate)  # Manipulación de fechas
 library(circular) # Datos periódicos
 library(gt) # Tablas
+library(gtExtras) # Extras de tablas gt
+library(gtsummary) # Tablas resúmen
 library(reshape) # Untable
 library(sf) # Trabajar con mapas
 conflicted::conflict_prefer("filter", "dplyr")
@@ -24,24 +70,116 @@ conflicted::conflict_prefer("select", "dplyr")
 options(scipen=999)
 ```
 
+# 2️⃣ Datos
 
-# Datos
-
-Se importan los datos de viajes en subte de la Ciudad Autónoma de Buenos Aires, en 2020. 
+Se importan los datos de [viajes en subte de la Ciudad Autónoma de Buenos Aires](https://data.buenosaires.gob.ar/dataset/subte-viajes-molinetes), en Noviembre 2021.
 
 ```{r}
-df <-
-  read_delim(
-    'https://cdn.buenosaires.gob.ar/datosabiertos/datasets/sbase/subte-viajes-molinetes/molinetes_112021.csv',
+base_url = 'https://cdn.buenosaires.gob.ar/datosabiertos/datasets/sbase/subte-viajes-molinetes/'
+mes_url  = 'molinetes_112021.csv'
+
+
+df <- read_delim(
+    paste0(base_url, mes_url),
     delim = ';',
     col_types = cols(FECHA = col_date("%d/%m/%Y"))
   ) %>%
+  
+  # Limpieza de los nombres de las columnas
   janitor::clean_names() %>%
+  
+  # Existen algunos datos sin fecha
   filter(!is.na(fecha)) %>%
-  mutate(hora = hour(desde))
+  
+  # Hora en formato correcto
+  mutate(hora = hour(desde)) %>% 
+  
+  # Se asigna el color correspondiente a cada línea
+  mutate(
+    linea=str_replace(linea, 'Linea',''),
+    color = case_when(
+      linea == 'A' ~ '#18cccc',
+      linea == 'B' ~ '#eb0909',
+      linea == 'C' ~ '#233aa8',
+      linea == 'D' ~ '#02db2e',
+      linea == 'E' ~ '#c618cc',
+      linea == 'H' ~ '#ffdd00',
+      TRUE ~ 'black'
+    )
+  ) %>% 
+  
+  # Selección de variables relevantes
+  select(linea, color, fecha, desde, hasta, hora, linea, molinete, estacion, 
+         pax_pagos, pax_pases_pagos, pax_franq, pax_total)
 ```
 
-# Hora de uso de cada línea de subte
+Se obtienen los datos del mes anterior para generar comparaciones:
+
+```{r}
+mes_url = 'molinetes_102021.csv'
+
+df_oct <- read_delim(
+    paste0(base_url, mes_url),
+    delim = ';',
+    col_types = cols(FECHA = col_date("%d/%m/%Y"))
+  ) %>% 
+  # Limpieza de los nombres de las columnas
+  janitor::clean_names() %>%
+  
+  # Existen algunos datos sin fecha
+  filter(!is.na(fecha)) %>%
+  
+  # Hora en formato correcto
+  mutate(hora = hour(desde)) %>% 
+  
+  # Se asigna el color correspondiente a cada línea
+  mutate(linea=str_replace(linea, 'Linea',''))
+
+```
+
+# 3️⃣ Análisis exploratorio de los datos
+
+```{r, layout='l-page'}
+df %>% select(-color) %>% 
+  head(5) %>% 
+  gt() %>% 
+  tab_header(title=md('**Formato de los datos (primeras 5 filas)**'),
+             subtitle='Cantidad de pasajeros por molinete 
+             y por estación de todas las estaciones de la 
+             red de subte, Noviembre 2021') %>% 
+  opt_align_table_header('left') %>% 
+  tab_footnote(locations=cells_column_labels(columns=molinete),
+               'Se ignorará el molinete específico y se considerarán 
+               los datos agregados a nivel estación')
+```
+
+Se observa la distribución de pasajeros por hora. La cantidad total de pasajeros difiere entre líneas.
+
+```{r}
+#| fic.cap='Pasajeros por hora, Noviembre 2021'
+df %>%
+  group_by(linea, color, hora) %>%
+  summarise(pax_total=sum(pax_total)) %>%
+  ungroup() %>%
+  ggplot(aes(x=hora, y=pax_total, fill=color))+
+  geom_col(color='white')+
+  scale_fill_identity()+
+  facet_wrap(~linea)+
+  scale_y_continuous(labels = scales::label_number(suffix = "k", 
+                                           scale = 1e-3, 
+                                           big.mark = ","))+
+  theme_bw()+
+  labs(x='Hora', y='Pasajeros totales', 
+       title='Cantidad de pasarjeros por hora por línea',
+       subtitle='Noviembre 2021',
+       caption='Fuente: Elaboración propia en base a datos del portal de datos abiertos de la Ciudad de Buenos Aires')
+```
+
+# 4️⃣ Transformaciones y gráficos
+
+Se realizan algunas transformaciones y se generan las funciones que luego se utilizarán para generar gráficos a incorporar a una tabla.
+
+## 4.1 Hora de uso de cada línea de subte
 
 Función para obtener la hora promedio:
 
@@ -53,7 +191,9 @@ get_hour <- function(.linea, .df) {
   
     hora <- untable(temp, num = temp$pax_total) %>%
       select(-pax_total) %>%
-      mutate(hora_circular = circular(hora, template = "clock24", units = "hours")) %>%
+      mutate(hora_circular = circular(hora, 
+                                      template = "clock24", 
+                                      units = "hours")) %>%
       summarise(hora = mean(hora_circular)) %>%
       pull(hora)
   
@@ -112,12 +252,11 @@ plot_clock <- function(.linea, .df, .color = 'black', .hora_promedio) {
 Test de la función
 
 ```{r}
-plot_clock(.df=df, .linea='LineaB', .color='red',
-           .hora_promedio=get_hour(.linea='LineaB',.df=df))
+plot_clock(.df=df, .linea='B', .color='red',
+           .hora_promedio=get_hour(.linea='B',.df=df))
 ```
 
-
-# Estación más utilizada por línea
+## 4.2 Estación más utilizada por línea
 
 ```{r}
 estacion_mas_usada <- df %>% 
@@ -127,13 +266,13 @@ estacion_mas_usada <- df %>%
   slice(which.max(pax_total)) 
 ```
 
-# Mapa de de estaciones y uso
+## 4.3 Mapa de de estaciones y uso
 
 Se cargan los datos del geojson de barrios de la Ciudad Autónoma de Buenos Aires:
 
-```{r}
+```{r, message=FALSE}
 # Mapa barrios CABA
-caba <- st_read('http://cdn.buenosaires.gob.ar/datosabiertos/datasets/barrios/barrios.geojson') %>% 
+caba <- st_read('http://cdn.buenosaires.gob.ar/datosabiertos/datasets/barrios/barrios.geojson', quiet = TRUE) %>% 
   mutate(barrio=str_to_title(BARRIO))
 
 mapa <- ggplot()+
@@ -164,57 +303,72 @@ estaciones_accesibles <- readr::read_csv('https://cdn.buenosaires.gob.ar/datosab
 
 estaciones <- estaciones_accesibles %>% 
   bind_rows(estaciones_simple) %>% 
-  mutate(estacion = case_when(estacion=='Saenz Pena'~'Saenz Peña',
-                              estacion=='Humberto 1?'~'Humberto I',
-                              estacion=='R.scalabrini Ortiz'~'Scalabrini Ortiz',
-                              estacion=='Plaza De Los Virreyes - Eva Peron'~'Pza. De Los Virreyes',
-                              estacion=='Aguero'~'Agüero',
-                              estacion=='San Martin'~'General San Martin',
-                              str_detect(estacion,'Carranza')~'Ministro Carranza',
-                              TRUE ~ estacion))
+  mutate(
+    estacion = case_when(
+      estacion == 'Saenz Pena' ~ 'Saenz Peña',
+      estacion == 'Humberto 1?' ~ 'Humberto I',
+      estacion == 'R.scalabrini Ortiz' ~ 'Scalabrini Ortiz',
+      estacion == 'Plaza De Los Virreyes - Eva Peron' ~ 'Pza. De Los Virreyes',
+      estacion == 'Aguero' ~ 'Agüero',
+      estacion == 'San Martin' ~ 'General San Martin',
+      str_detect(estacion, 'Carranza') ~ 'Ministro Carranza',
+      TRUE ~ estacion
+    )
+  )
 
 
-estaciones <- estaciones[!duplicated(estaciones[,1:2]),]
+estaciones <- estaciones[!duplicated(estaciones[, 1:2]), ]
 
-df_pasajeros_estaciones <- df %>% 
-  group_by(linea, estacion) %>% 
-  summarise(pax_total = sum(pax_total)) %>% 
-  mutate(estacion = str_trim(str_to_title(estacion)), 
-         linea = str_replace(linea, 'Linea','')) %>% 
-    mutate(estacion = case_when(estacion=='Flores'~'San Jose De Flores',
-                                estacion=='Saenz Peña '~'Saenz Peña',
-                                estacion=='Callao.b'~'Callao',
-                                estacion=='Retiro E'~'Retiro',
-                                estacion=='Independencia.h'~'Independencia',
-                                estacion=='Pueyrredon.d'~'Pueyrredon',
-                                estacion=='General Belgrano'~'Belgrano',
-                                estacion=='Rosas'~'Juan Manuel De Rosas',
-                                estacion=='Patricios'~'Parque Patricios',
-                                estacion=='Mariano Moreno'~'Moreno',
-                              TRUE ~ estacion)) %>% 
-  left_join(estaciones, by = c("linea" = "linea", "estacion" = "estacion")) %>% 
-  mutate(color = case_when(linea == 'A'~'#18cccc',
-                           linea == 'B'~'#eb0909',
-                           linea == 'C'~'#233aa8',
-                           linea == 'D' ~'#02db2e',
-                           linea == 'E' ~'#c618cc',
-                           linea == 'H' ~ '#ffdd00',
-                           TRUE ~ 'black'))
+df_pasajeros_estaciones <- df %>%
+  group_by(linea, color, estacion) %>%
+  summarise(pax_total = sum(pax_total)) %>%
+  mutate(estacion = str_trim(str_to_title(estacion))) %>%
+  mutate(
+    estacion = case_when(
+      estacion == 'Flores' ~ 'San Jose De Flores',
+      estacion == 'Saenz Peña ' ~ 'Saenz Peña',
+      estacion == 'Callao.b' ~ 'Callao',
+      estacion == 'Retiro E' ~ 'Retiro',
+      estacion == 'Independencia.h' ~ 'Independencia',
+      estacion == 'Pueyrredon.d' ~ 'Pueyrredon',
+      estacion == 'General Belgrano' ~ 'Belgrano',
+      estacion == 'Rosas' ~ 'Juan Manuel De Rosas',
+      estacion == 'Patricios' ~ 'Parque Patricios',
+      estacion == 'Mariano Moreno' ~ 'Moreno',
+      TRUE ~ estacion
+    )
+  ) %>%
+  left_join(estaciones, by = c("linea" = "linea", "estacion" = "estacion"))
 ```
 
-Mapa de todas las estaciones juntas: 
+Mapa de todas las estaciones juntas:
 
 ```{r}
+lbreaks <- round(quantile(df_pasajeros_estaciones$pax_total, 
+                          c(0,0.25,0.5,0.75,1)),2) %>%
+    as.numeric()
+
 ggplot() +
   geom_sf(data = caba, 
           color = "grey", 
           fill = 'white',
           size = 0.1, 
           show.legend = FALSE)+
-  geom_point(data = df_pasajeros_estaciones,
-             aes(x = long, y = lat, color=linea, size=pax_total))+
-  scale_color_manual(values=unique(df_pasajeros_estaciones$color))+
-  theme_minimal()
+    geom_point(data = df_pasajeros_estaciones,
+               aes(x = long, y = lat, size=pax_total, fill=linea), 
+               alpha=0.7, color='black', shape=21)+
+    scale_size_continuous(breaks = lbreaks, range=c(1,10),
+                          limits=c(min(df_pasajeros_estaciones$pax_total),
+                                   max(df_pasajeros_estaciones$pax_total)))+
+    scale_fill_manual(values=unique(df_pasajeros_estaciones$color %>% unique()))+
+    theme_void()+
+    theme(text = element_text(size = 12), 
+          legend.position = 'right', 
+          axis.text = element_blank(), 
+          plot.margin = unit(c(0, 0, 0, 0), "null"))+
+    labs(x='',y='',size='Pasajeros', fill='Línea', 
+         title='Cantidad de pasajeros totales por línea, por estación',
+         subtitle='Noviembre 2021')
 ```
 
 Estaciones individuales para la tabla:
@@ -222,7 +376,6 @@ Estaciones individuales para la tabla:
 ```{r}
 plot_mapa <- function(.df, .linea){
    temp <- .df %>% 
-    mutate(linea = paste0('Linea',linea)) %>% 
     filter(linea==.linea) %>% 
     mutate(pax_percent = pax_total / sum(pax_total))
    
@@ -250,37 +403,70 @@ plot_mapa <- function(.df, .linea){
 }
 ```
 
-# Datos para la tabla
+# 5️⃣ Datos para la tabla
+
+Cantidad de pasajeros por estación en Octubre 2021:
+
+```{r}
+df_pasajeros_mesprevio <- df_oct %>%
+  group_by(linea) %>%
+  summarise(pax_total_oct = sum(pax_total)) 
+```
 
 Se genera el tibble que contiene los datos para luego generar la tabla:
 
 ```{r}
 
-datos_tabla <- tibble(linea = sort(unique(df$linea))) %>% 
+datos_tabla <- tibble(linea = sort(unique(df$linea))) %>%
+  
+  # Recorridos
+  mutate(
+    recorrido = case_when(
+      linea == 'A' ~ 'Plaza de Mayo - San Pedrito',
+      linea == 'B' ~ 'J.M. Rosas - L.N. Alem',
+      linea == 'C' ~ 'Constitución - Retiro',
+      linea == 'D' ~ 'Congreso de Tucumán - Catedral',
+      linea == 'E' ~ 'Retiro - Plaza de los Virreyes',
+      linea == 'H' ~ 'Hospitales - Facultad de Derecho',
+      TRUE ~ 'black'
+    )
+  ) %>%
+  
   
   # Colores
-  mutate(recorrido = case_when(linea == 'LineaA'~'Plaza de Mayo - San Pedrito',
-                           linea == 'LineaB'~'J.M. Rosas - L.N. Alem',
-                           linea == 'LineaC'~'Constitución - Retiro',
-                           linea == 'LineaD' ~'Congreso de Tucumán - Catedral',
-                           linea == 'LineaE' ~'Retiro - Plaza de los Virreyes',
-                           linea == 'LineaH' ~ 'Hospitales - Facultad de Derecho',
-                           TRUE ~ 'black')) %>%
-  
-  
-  # Colores
-  mutate(color = case_when(linea == 'LineaA'~'#18cccc',
-                           linea == 'LineaB'~'#eb0909',
-                           linea == 'LineaC'~'#233aa8',
-                           linea == 'LineaD' ~'#02db2e',
-                           linea == 'LineaE' ~'#c618cc',
-                           linea == 'LineaH' ~ '#ffdd00',
-                           TRUE ~ 'black')) %>%
+  mutate(
+    color = case_when(
+      linea == 'A' ~ '#18cccc',
+      linea == 'B' ~ '#eb0909',
+      linea == 'C' ~ '#233aa8',
+      linea == 'D' ~ '#02db2e',
+      linea == 'E' ~ '#c618cc',
+      linea == 'H' ~ '#ffdd00',
+      TRUE ~ 'black'
+    )
+  ) %>% 
   
   # Cantidad de viajes realizados en cada línea
+  left_join(df %>%
+              mutate(hora_grupo = cut(
+                hora,
+                breaks = 3,
+                labels = c('Mañana', 'Tarde', 'Noche')
+              )) %>%
+              group_by(linea, hora_grupo) %>%
+              summarise(pax_total = sum(pax_total)) %>%
+              group_by(linea) %>%
+              mutate(pax_percent = round(pax_total / sum(pax_total)*100)) %>%
+              group_by(linea) %>%
+              summarise(pasajeros_tipo = list(pax_percent))) %>% 
+  
   left_join(df %>% 
     group_by(linea) %>% 
     summarise(pax_total = sum(pax_total))) %>%
+  
+  left_join(df_pasajeros_mesprevio) %>% 
+  
+  mutate(variacion=(pax_total/pax_total_oct-1)) %>% 
   
   # Hora promedio por línea
   mutate(hora_promedio = map(linea, ~get_hour(.linea=.x, .df=df))) %>% 
@@ -301,94 +487,193 @@ datos_tabla <- tibble(linea = sort(unique(df$linea))) %>%
   
   # Gráfico de la evolución de cantidad de pasajeros por línea
   mutate(
-    evolucion_plot = map2(linea, color,
+    evolucion_plot = map2(
+      linea,
+      color,
       ~ df %>% filter(linea == .x) %>%
-          group_by(fecha) %>%
-          summarise(n = sum(pax_total)) %>%
-          ggplot(aes(x = fecha, y = n)) +
-          geom_line(color='grey', size=2.5)+
-          geom_line(color=.y, size=1.5)+
-          # scale_y_continuous(labels = scales::unit_format(unit = "K", scale = 1e-3)) +
-          theme_minimal()+
-          labs(x='',y='Pasajeros')+
-          theme(text=element_text(size=30),
-                axis.title.y=element_text(color='grey'),
-                 panel.grid = element_blank())
+        group_by(fecha) %>%
+        summarise(n = sum(pax_total)) %>%
+        ggplot(aes(x = fecha, y = n)) +
+        geom_line(color = 'grey', size = 2.5) +
+        geom_line(color = .y, size = 1.5) +
+        # scale_y_continuous(labels = scales::unit_format(unit = "K", scale = 1e-3)) +
+        theme_minimal() +
+        labs(x = '', y = 'Pasajeros') +
+        theme(
+          text = element_text(size = 30),
+          axis.title.y = element_text(color = 'grey'),
+          panel.grid = element_blank()
+        )
     )
-  ) %>% 
-  mutate(linea_imagen = here::here('',paste0('gcba_subte/lineas/',
-                                             tolower(linea), 
-                                             '.jpg'))) %>% 
+  ) %>%
+  mutate(linea_imagen = here::here('', paste0(
+    'gcba_subte/lineas/', tolower(linea), '.jpg'
+  ))) %>%
   
   # Mapa por línea:
-  mutate(mapa = map(linea, ~ plot_mapa(.df=df_pasajeros_estaciones, 
-                                       .linea=.x))) %>% 
-  
+  mutate(mapa = map(linea, ~ plot_mapa(.df = df_pasajeros_estaciones,
+                                       .linea = .x))) %>%
+
   # Estación más utilizada por línea
   left_join(estacion_mas_usada %>% select(-pax_total))
 ```
 
 
-# Generación de la tabla
 
-Se utiliza el paquete {gt} para generar la tabla que contiene plots de {ggplot2} 
+# 6️⃣ Generación de la tabla
 
-```{r}
+Se utiliza el paquete {gt} para generar la tabla que contiene plots de {ggplot2}
+
+```{r, code_folding=FALSE}
 tabla <- datos_tabla %>%
-  
-  ungroup() %>%
   
   # Selección de variables relevantes y orden:
   select(
     linea,
     linea_imagen,
     recorrido,
+    estacion_mas_usada,
     mapa,
     pax_total,
-    estacion_mas_usada,
+    variacion,
+    pasajeros_tipo,
     reloj_plot,
     evolucion_plot
   ) %>%
   
   # Se genera la tabla
-  gt() %>%
+  gt() 
+```
+
+De momento se centrará el análisis en las columnas con datos simples, sin considerar las que incluyen gráficos.
+
+```{r}
+#| fic.cap = 'Tabla inicial'
+tabla %>%  
+  cols_hide(columns = c(pasajeros_tipo, linea_imagen, mapa, reloj_plot, evolucion_plot)) 
+```
+
+Considerando la estructura de tablas de la Figura 2, se comienza por el título y subtitulo:
+
+```{r, echo=FALSE, out.width='80%'}
+knitr::include_graphics(here::here('gcba_subte/images/gt_titulo_subtitulo.png'))
+```
+
+
+
+```{r, code_folding=FALSE}
+tabla <- tabla %>% 
   
-  
-  # Colores de los textos
-  tab_style(
-    style = cell_text(color = "#18cccc"),
-    locations = cells_body(columns = c(recorrido),
-                           rows = linea == "LineaA")
-  ) %>%
-  tab_style(
-    style = cell_text(color = "#eb0909"),
-    locations = cells_body(columns = c(recorrido),
-                           rows = linea == "LineaB")
-  ) %>%
-  tab_style(
-    style = cell_text(color = "#233aa8"),
-    locations = cells_body(columns = c(recorrido),
-                           rows = linea == "LineaC")
-  ) %>%
-  tab_style(
-    style = cell_text(color = "#02db2e"),
-    locations = cells_body(columns = c(recorrido),
-                           rows = linea == "LineaD")
-  ) %>%
-  tab_style(
-    style = cell_text(color = "#c618cc"),
-    locations = cells_body(columns = c(recorrido),
-                           rows = linea == "LineaE")
-  ) %>%
-  tab_style(
-    style = cell_text(color = "#ffdd00"),
-    locations = cells_body(columns = c(recorrido),
-                           rows = linea == "LineaH")
+  # Título y subtitulo
+  tab_header(
+    title    = md('**Uso del subte en la Ciudad Autónoma de Buenos Aires**'),
+    subtitle = 'Período de análisis: Noviembre 2021'
   ) %>%
   
-  # La línea oculta, con la imagen alcanza
-  cols_hide(linea) %>%
+  # Alineación izquierda
+  opt_align_table_header('left') %>%
   
+  
+  # Estilo
+  tab_style(locations = cells_title(groups = 'title'),
+            style = list(
+              cell_text(
+                font = google_font(name = 'Raleway'),
+                size   = 'xx-large',
+                weight = 'bold',
+                align  = 'left',
+                color  = '#515459'
+              )
+            )) %>% 
+  
+  tab_style(locations = cells_title(groups = 'subtitle'),
+            style = list(
+              cell_text(
+                font  = google_font(name = 'Raleway'),
+                size  = 'small',
+                align = 'left',
+                color = '#666666'
+              )
+            ))
+```
+
+Excluyendo las columnas de gráficos, el formato de la tabla actual es el siguiente:
+
+```{r}
+#| fic.cap = 'Tabla inicial'
+tabla %>%  
+  cols_hide(columns = c(pasajeros_tipo, linea_imagen, mapa, reloj_plot, evolucion_plot))
+```
+
+Siguiendo la estructura, es momento de definir los nombres y formato de las columnas:
+
+```{r, echo=FALSE, out.width='80%'}
+knitr::include_graphics(here::here('gcba_subte/images/gt_col_labels.png'))
+```
+
+```{r, code_folding=FALSE}
+tabla <- tabla %>% 
+  
+  # Renombrar variables
+  cols_label(
+    linea              = md('Linea'),
+    recorrido          = md('Recorrido'),
+    mapa               = md('% Pasajeros por estación'),
+    reloj_plot         = md('Pasajeros por hora'),
+    pasajeros_tipo     = md('Momento del día'),
+    pax_total          = md('Total'),
+    variacion          = md('% Variación'),
+    evolucion_plot     = md('Pasajeros por día'),
+    estacion_mas_usada = md('Estación más usada')
+  ) %>% 
+  
+  
+  # Alineación
+  cols_align('center',
+    columns = c(
+      'pax_total','variacion',
+      'estacion_mas_usada',
+      'reloj_plot',
+      'evolucion_plot')
+  ) %>%
+  
+  # Ancho de las columnas
+  cols_width(linea              ~ px(50),
+             linea_imagen       ~ px(50),
+             recorrido          ~ px(100),
+             estacion_mas_usada ~ px(80),
+             reloj_plot         ~ px(20),
+             pax_total          ~ px(80),
+             variacion          ~ px(100)) %>% 
+  
+  # Spanners: agrupamiento de columnas
+  tab_spanner(
+    label = "Uso por hora",
+    columns = c(pasajeros_tipo, reloj_plot)
+  ) %>% 
+  
+  tab_spanner(
+    label= "Cantidad de pasajeros",
+    columns = c(pax_total, variacion)
+  )
+```
+
+```{r}
+#| fic.cap = 'Tabla inicial'
+tabla %>%  
+  cols_hide(columns = c(pasajeros_tipo, linea_imagen, mapa, reloj_plot, evolucion_plot))
+```
+
+El siguiente paso es definir cuestiones sobre el contenido de la tabla. Esta es la parte fundamental y es donde las columnas de gráficos podrán ser visualizadas luego de una transformación adicional.
+
+```{r, echo=FALSE, out.width='80%'}
+knitr::include_graphics(here::here('gcba_subte/images/gt_table_body.png'))
+```
+
+La primera columna de la tabla es la imágen correspondiente a cada línea. Se quiere que aparezca como imágen (no como path). Para ello, se utiliza la función **text_transform()** para aplicar **local_image()** a cada una de las imágenes contenidas en la tabla mediante paths. Luego se renombra a la columna, eliminando el nombre ya que es redundante.
+
+```{r, code_folding=FALSE}
+tabla <- tabla %>%   
   
   # Iconos de cada línea
   text_transform(
@@ -397,7 +682,95 @@ tabla <- datos_tabla %>%
       lapply(linea_imagen, local_image, height = 20)
     }
   ) %>%
-  cols_label(linea_imagen = '') %>%
+  
+  cols_label(linea_imagen = '')
+```
+
+Se transforma el color del texto de recorrido según la línea:
+
+```{r}
+tabla <- tabla %>% 
+  # Colores de los textos
+  tab_style(
+    style = cell_text(color = "#18cccc"),
+    locations = cells_body(columns = c(recorrido),
+                           rows = linea == "A")
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#eb0909"),
+    locations = cells_body(columns = c(recorrido),
+                           rows = linea == "B")
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#233aa8"),
+    locations = cells_body(columns = c(recorrido),
+                           rows = linea == "C")
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#02db2e"),
+    locations = cells_body(columns = c(recorrido),
+                           rows = linea == "D")
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#c618cc"),
+    locations = cells_body(columns = c(recorrido),
+                           rows = linea == "E")
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#ffdd00"),
+    locations = cells_body(columns = c(recorrido),
+                           rows = linea == "H")
+  ) %>%
+  
+  # La línea oculta, con la imagen alcanza
+  cols_hide(linea) %>%
+  
+  # Fondo gris en el recorrido
+  tab_style(style     = list(cell_fill(color = "#f0f0f0")),
+            locations = cells_body(columns = c('recorrido')))
+  
+```
+
+```{r}
+tabla %>%  
+  cols_hide(columns = c(pasajeros_tipo, mapa, reloj_plot, evolucion_plot))
+```
+
+Se puede utilizar ciertas funciones de {gt} para formatear las columnas dependiendo del formato de cada variable.
+
+```{r, code_folding=FALSE}
+tabla <- tabla %>% 
+  
+  # Formato numérico
+  fmt_number(pax_total, suffixing = TRUE) %>% 
+  
+  # Formato de porcentaje
+  fmt_percent(variacion)
+```
+
+Además, se utiliza la función gt_plt_stack() del paquete {gtExtras} para incorporar gráficos del % de uso de cada línea según el momento del día: 
+
+
+```{r, code_folding=FALSE}
+tabla <- tabla %>% 
+  gt_plt_bar_stack(
+    column = pasajeros_tipo,
+    position = 'fill',
+    labels = c("Mañana","Tarde","Noche"),
+    palette = c('grey', '#A3B1C9','#4C699E'),
+    fmt_fn = scales::label_percent(scale=1),
+    width = 60)
+```
+
+```{r}
+tabla %>%  
+  cols_hide(columns = c(mapa, reloj_plot, evolucion_plot))
+```
+
+Para las 3 columnas de gráficos **ggplot2** es necesario aplicar nuevamente la función **text_transform()** pero en este caso se utiliza **ggplot_image** para transformar estas listas contenidas en el dataframe original a gráficos.
+
+```{r, code_folding=FALSE}
+tabla <- tabla %>% 
   
   # Ggplots en formato gráfico (sino aparecen como texto)
   text_transform(
@@ -434,126 +807,103 @@ tabla <- datos_tabla %>%
         aspect_ratio = 2
       )
     }
-  ) %>%
+  ) 
+```
+
+
+
+```{r, echo=FALSE, layout='l-page'}
+gt::gtsave(tabla, 'tabla_subtes.png', 
+           vwidth = 2000, vheight = 3000)
+```
+
+Finalmente, se incluyen algunas anotaciones y opciones genreales de la tabla:
+
+```{r, echo=FALSE, out.width='80%'}
+knitr::include_graphics(here::here('gcba_subte/images/gt_footnote_sourcenote.png'))
+```
+
+```{r, code_folding=TRUE}
+tabla <- tabla %>% 
   
-  
-  # Formato numérico
-  fmt_number(pax_total, suffixing = TRUE) %>%
-  
-  # Renombrar variables
-  cols_label(
-    recorrido = md('Recorrido'),
-    mapa = md('% Pasajeros por estación'),
-    reloj_plot = md('Pasajeros por hora'),
-    pax_total = md('Total pasajeros'),
-    evolucion_plot = 'Pasajeros por día',
-    estacion_mas_usada = 'Estación más usada'
-  ) %>%
-  
-  # Fondo gris en el recorrido
-  tab_style(style     = list(cell_fill(color = "#f0f0f0")),
-            locations = cells_body(columns = c('recorrido'))) %>%
-  
-  # Opciones de la tabla
-  tab_options(
-    data_row.padding = px(0),
-    table.border.top.style = "hidden",
-    table.border.bottom.style = "hidden",
-    table_body.border.top.style = "solid",
-    column_labels.border.bottom.style = "solid"
-  ) %>%
-  
-  # Título y anotaciones
-  tab_header(
-    title = md('**Uso del subte en la Ciudad Autónoma de Buenos Aires**'),
-    subtitle = 'Período de análisis: Noviembre 2021'
-  ) %>%
-  
-  opt_align_table_header('left') %>%
+  tab_footnote(cells_column_labels(columns = variacion), 
+               footnote = '% Variación en relación a Octubre 2021.') %>%
   
   tab_footnote(cells_column_labels(columns = reloj_plot), 
-               footnote = 'La línea de color representa el horario promedio considerando la distribución circular de la variable hora.') %>%
+               footnote = 'La línea de color representa el horario promedio
+               considerando la distribución circular de la variable hora.') %>%
   
   tab_footnote(cells_column_labels(columns = mapa), 
-               footnote = 'Se considera el % de pasajeros por estación con relación al total de pasajeros en esa línea. Para los cortes se utilizaron los cuantiles de la distribución. Se observa que la Línea C presentó un uso muy elevado en las cabeceras, mientras que en el resto de las líneas el uso fue más distribuido.') %>%
+               footnote = 'Se considera el % de pasajeros por estación con
+               relación al total de pasajeros en esa línea. Para los cortes 
+               se utilizaron los cuantiles de la distribución. Se observa que 
+               la Línea C presentó un uso muy elevado en las cabeceras, 
+               mientras que en el resto de las líneas el uso fue más
+               distribuido.') %>%
   
+  tab_footnote(cells_column_labels(columns = pasajeros_tipo), 
+               footnote = 'Valores en % por línea. Mañana = 5 a 11 hs, Tarde = 12 a 17 hs, Noche = 18 a 23 hs') %>%
   
   tab_source_note(
     source_note = html(
-      "<div><br>Elaboración propia en base a datos del Portal de datos abiertos de la Ciudad de Buenos Aires</br></div>")
+      "<div><br>Elaboración propia en base a datos del Portal de datos 
+      abiertos de la Ciudad de Buenos Aires</br></div>")
   ) %>% 
   
   
-  # Estilo
-  tab_style(locations = cells_title(groups = 'title'),
-            style = list(
-              cell_text(
-                font = google_font(name = 'Raleway'),
-                size = 'xx-large',
-                weight = 'bold',
-                align = 'left',
-                color = '#515459'
-              )
-            )) %>%
-  
-  tab_style(locations = cells_title(groups = 'subtitle'),
-            style = list(cell_text(
-              font = google_font(name = 'Raleway'),
-              size = 'small',
-              align = 'left', 
-              color = '#666666'
-            ))) %>%
   
   tab_style(locations = cells_source_notes(),
             style = list(cell_text(
-              font = google_font(name = 'Raleway'),
-              size = 'medium',
+              font  = google_font(name = 'Raleway'),
+              size  = 'medium',
               align = 'left', 
               color = '#666666'
             ))) %>%
   
   tab_style(locations = cells_footnotes(),
-            style = list(cell_text(
-              font = google_font(name = 'Raleway'),
-              size = 'medium',
+            style   = list(cell_text(
+              font  = google_font(name = 'Raleway'),
+              size  = 'medium',
               align = 'left', 
               color = '#666666'
-            ))) %>%
-  
-  # Alineación
-  cols_align(
-    'center',
-    columns = c(
-      'pax_total',
-      'estacion_mas_usada',
-      'reloj_plot',
-      'evolucion_plot'
-    )
-  ) %>%
-  
-  # Ancho de las columnas
-  cols_width(recorrido ~ px(100),
-             estacion_mas_usada ~ px(80),
-             reloj_plot ~ px(20),
-             pax_total ~ px(80))
+            ))) %>% 
 
+  # Opciones de la tabla
+  tab_options(
+    data_row.padding                  = px(0),
+    table.border.top.style            = "hidden",
+    table.border.bottom.style         = "hidden",
+    table_body.border.top.style       = "solid",
+    column_labels.border.bottom.style = "solid"
+  )
+```
+
+```{r, eval=TRUE, echo=FALSE, layout='l-page'}
+gt::gtsave(tabla, 'tabla_subtes.png', 
+           vwidth = 2000, vheight = 3000)
+```
+
+# 7️⃣ Guardar la tabla nueva
+
+Se guarda la tabla definiendo el tamaño:
+
+```{r, eval=FALSE, code_folding=FALSE}
+gt::gtsave(tabla, 'tabla_subtes.png', 
+           vwidth = 2000, vheight = 3000)
 ```
 
 
-
-
-
-# Guardar la tabla nueva
-
-Se guarda la tabla:
+# SessionInfo()
 
 ```{r}
-gt::gtsave(tabla, 'tabla_subtes.png', 
-           vwidth = 1500, vheight = 2500)
+sessioninfo::package_info() %>% 
+  filter(attached==TRUE) %>% 
+  select(package, loadedversion, date, source) %>% 
+  gt() %>% 
+  tab_header(title='Paquetes utilizados',
+             subtitle='Versiones') %>% 
+  opt_align_table_header('left')
 ```
-
-
-
 
 
 
